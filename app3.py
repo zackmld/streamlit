@@ -1,150 +1,69 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
-from statsmodels.tsa.seasonal import STL
-from statsmodels.tsa.stattools import adfuller
-from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
-from statsmodels.tsa.statespace.sarimax import SARIMAX
+import plotly.express as px
 
 # Configuration de la page
-st.set_page_config(page_title="Analyse de Série Temporelle", layout="wide")
+st.set_page_config(layout="wide", page_title="Dashboard NovaRetail")
 
-st.title("Application d'Analyse et Prédiction de Séries Temporelles")
-st.markdown("""
-Cette interface interactive permet de charger des données, d'analyser la stationnarité et de réaliser des prévisions 
-professionnelles à l'aide des modèles **ARIMA** et **SARIMA**.
-""")
+# Chargement des données (basé sur l'analyse précédente)
+# On simule ici df_final et df_campaigns pour le fonctionnement du code
+data_leads = {
+    'channel': ['Emailing', 'Google Ads', 'LinkedIn Ads', 'Emailing', 'Google Ads', 'LinkedIn Ads', 'Emailing', 'Google Ads', 'LinkedIn Ads', 'Emailing'],
+    'status': ['MQL', 'SQL', 'Client', 'MQL', 'SQL', 'Client', 'MQL', 'SQL', 'Client', 'MQL'],
+    'sector': ['SaaS', 'Industry', 'Finance', 'HealthTech', 'Retail', 'SaaS', 'Education', 'Industry', 'Finance', 'SaaS'],
+    'cost': [1500, 4200, 3800, 1500, 4200, 3800, 1500, 4200, 3800, 1500]
+}
+df_final = pd.DataFrame(data_leads)
 
-# --- 1. CHARGEMENT DES DONNÉES ---
-st.sidebar.header("1. Chargement des données")
-uploaded_file = st.sidebar.file_uploader("Charger un fichier CSV ou Excel", type=["csv", "xlsx"])
+campaigns = [
+    {"channel": "Emailing", "cost": 1500, "clicks": 1800, "conversions": 150},
+    {"channel": "Google Ads", "cost": 4200, "clicks": 3200, "conversions": 260},
+    {"channel": "LinkedIn Ads", "cost": 3800, "clicks": 1100, "conversions": 95}
+]
+df_campaigns = pd.DataFrame(campaigns)
 
-if uploaded_file is not None:
-    try:
-        # Lecture du fichier selon le format
-        if uploaded_file.name.endswith('.csv'):
-            df = pd.read_csv(uploaded_file)
-        else:
-            df = pd.read_excel(uploaded_file)
-        
-        # Vérification et configuration de la colonne Date
-        if 'Date' in df.columns:
-            df['Date'] = pd.to_datetime(df['Date'])
-            df.set_index('Date', inplace=True)
-            st.sidebar.success("Index temporel configuré.")
-        else:
-            st.sidebar.error("Erreur : La colonne 'Date' est manquante.")
-        
-        # Choix de la variable à prédire (ex: CO(GT), T, ou RH)
-        target_col = st.selectbox("Sélectionnez la variable à analyser", df.columns)
-        
-        # Nettoyage : On remplace les 0.0 (souvent des erreurs capteurs) par la valeur précédente
-        df[target_col] = df[target_col].replace(0, pd.NA).ffill()
+# Calcul des KPI globaux
+total_cost = df_campaigns['cost'].sum()
+total_leads = df_campaigns['conversions'].sum()
+avg_cpl = total_cost / total_leads
+total_clients = len(df_final[df_final['status'] == 'Client'])
+conversion_rate = (total_leads / df_campaigns['clicks'].sum()) * 100
 
-        # --- 2. VISUALISATION (Exigence PDF) ---
-        st.header("2. Visualisation des Données")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.subheader("Série Originale")
-            fig1, ax1 = plt.subplots(figsize=(10, 5))
-            ax1.plot(df.index, df[target_col], color='#1f77b4', label="Valeurs Observées")
-            ax1.set_title(f"Évolution temporelle de {target_col}")
-            ax1.set_ylabel("Valeur")
-            ax1.legend()
-            st.pyplot(fig1)
+# --- INTERFACE STREAMLIT ---
 
-        with col2:
-            st.subheader("Décomposition STL")
-            # period=7 car les données de qualité de l'air suivent souvent un cycle de 7 jours (semaine)
-            res = STL(df[target_col], period=7).fit()
-            fig2, (ax_t, ax_s, ax_r) = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
-            res.trend.plot(ax=ax_t, title="Tendance (Trend)")
-            res.seasonal.plot(ax=ax_s, title="Saisonnalité (Seasonality)")
-            res.resid.plot(ax=ax_r, title="Résidus (Bruit)")
-            plt.tight_layout()
-            st.pyplot(fig2)
+st.title("Tableau de Bord Décisionnel - NovaRetail (Octobre 2025)")
 
-        # --- 3. STATIONNARITÉ (Exigence PDF : Test ADF + Message) ---
-        st.write("---")
-        st.header("3. Analyse de Stationnarité")
-        
-        result = adfuller(df[target_col].dropna())
-        p_value = result[1]
-        
-        st.metric(label="Valeur p (Test ADF)", value=f"{p_value:.4f}")
+# 1. Section KPI (5 indicateurs)
+col1, col2, col3, col4, col5 = st.columns(5)
+col1.metric("Budget Total", f"{total_cost} €")
+col2.metric("Total Leads", total_leads)
+col3.metric("CPL Moyen", f"{avg_cpl:.2f} €")
+col4.metric("Total Clients", total_clients)
+col5.metric("Taux Conv. Global", f"{conversion_rate:.2f} %")
 
-        if p_value <= 0.05:
-            st.success(" La série est **stationnaire** (p-value ≤ 0.05).")
-            st.info("Message explicatif : Les propriétés statistiques ne changent pas dans le temps. Vous pouvez utiliser d=0.")
-        else:
-            st.warning("⚠️ La série n'est **pas stationnaire** (p-value > 0.05).")
-            st.info("Message explicatif : Une tendance est présente. Il est conseillé d'utiliser d=1 (différenciation) dans le modèle.")
+st.markdown("---")
 
+# 2. Section Graphiques
+left_column, right_column = st.columns(2)
 
+with left_column:
+    st.subheader("Rentabilité : CPL par Canal")
+    df_campaigns['CPL'] = df_campaigns['cost'] / df_campaigns['conversions']
+    fig_cpl = px.bar(df_campaigns, x='channel', y='CPL', 
+                     labels={'CPL': 'Coût par Lead (€)', 'channel': 'Canal'},
+                     color='channel')
+    st.plotly_chart(fig_cpl, use_container_width=True)
 
-        # --- 4 & 5. PARAMÉTRAGE ET MODÈLE ---
-        st.write("---")
-        st.header("4. Paramétrage du Modèle")
-        
-        model_choice = st.radio("Type de modèle :", ("ARIMA", "SARIMA"))
+with right_column:
+    st.subheader("Qualité : Statut CRM par Canal")
+    status_counts = df_final.groupby(['channel', 'status']).size().reset_index(name='count')
+    fig_status = px.bar(status_counts, x='channel', y='count', color='status', 
+                        barmode='stack', labels={'count': 'Nombre de Leads'})
+    st.plotly_chart(fig_status, use_container_width=True)
 
-        st.subheader("Paramètres de base (p, d, q)")
-        cp, cd, cq = st.columns(3)
-        with cp: p = st.number_input("p (AR)", min_value=0, value=1)
-        with cd: d = st.number_input("d (Diff)", min_value=0, value=1)
-        with cq: q = st.number_input("q (MA)", min_value=0, value=1)
-
-        seasonal_order = (0, 0, 0, 0)
-        if model_choice == "SARIMA":
-            st.subheader("Paramètres Saisonniers (P, D, Q, s)")
-            sp, sd, sq, ss = st.columns(4)
-            with sp: P = st.number_input("P (Saisonnier AR)", min_value=0, value=0)
-            with sd: D = st.number_input("D (Diff Saisonnière)", min_value=0, value=0)
-            with sq: Q = st.number_input("Q (Saisonnier MA)", min_value=0, value=0)
-            with ss: s = st.number_input("s (Période, ex: 7)", min_value=1, value=7)
-            seasonal_order = (P, D, Q, s)
-
-        # Choix de l'horizon de prédiction
-        horizon = st.slider("Horizon de prédiction (pas de temps futurs)", 1, 60, 30)
-
-        if st.button(f"Entraîner et Prédire"):
-            try:
-                with st.spinner('Calculs en cours...'):
-                    # SARIMAX gère les deux types de modèles
-                    model = SARIMAX(df[target_col], order=(p, d, q), seasonal_order=seasonal_order)
-                    results = model.fit(disp=False)
-                    st.session_state['results'] = results
-                    st.success("Modèle entraîné !")
-
-            except Exception as e:
-                st.error(f"Erreur d'entraînement : {e}")
-
-        # --- 6. RÉSULTATS ET COMPARAISON (Exigence PDF) ---
-        if 'results' in st.session_state:
-            st.write("---")
-            st.header("5. Résultats de la Prédiction")
-            
-            res_fit = st.session_state['results']
-            forecast = res_fit.get_forecast(steps=horizon)
-            forecast_df = forecast.summary_frame()
-
-            st.subheader("Graphique Global")
-            fig_res, ax_res = plt.subplots(figsize=(12, 6))
-            ax_res.plot(df.index, df[target_col], label="Historique")
-            ax_res.plot(forecast_df.index, forecast_df['mean'], label="Prédiction", color='red', linestyle='--')
-            ax_res.fill_between(forecast_df.index, forecast_df['mean_ci_lower'], forecast_df['mean_ci_upper'], color='pink', alpha=0.3, label="Confiance 95%")
-            ax_res.legend()
-            st.pyplot(fig_res)
-
-            st.subheader("Comparaison : Zoom sur la période récente")
-            fig_z, ax_z = plt.subplots(figsize=(12, 5))
-            # On affiche les 20 derniers jours + le futur
-            ax_z.plot(df[target_col].tail(20), label="Observé (Recent)", marker='o')
-            ax_z.plot(forecast_df['mean'], label="Prédiction", color='red', marker='x', linestyle='--')
-            ax_z.legend()
-            st.pyplot(fig_z)
-
-    except Exception as e:
-        st.error(f"Erreur : {e}")
+# 3. Section Basse
+st.subheader("Segmentation des Leads par Secteur d'Activité")
+sector_counts = df_final['sector'].value_counts().reset_index()
+sector_counts.columns = ['Secteur', 'Nombre']
+fig_sector = px.pie(sector_counts, values='Nombre', names='Secteur', hole=0.4)
+st.plotly_chart(fig_sector, use_container_width=True)
